@@ -7,12 +7,16 @@ import { cn } from "@/lib/utils";
 import { NAV_LINKS, ROUTES } from "@/lib/constants";
 import { Logo } from "./logo";
 
+import { useAuth } from "@/hooks/use-auth";
+import { UserButton, SignInButton } from "@clerk/nextjs";
+
 interface MobileNavProps {
   onClose: () => void;
 }
 
 export function MobileNav({ onClose }: MobileNavProps) {
   const pathname = usePathname();
+  const { user, isClerkLoaded } = useAuth();
 
   return (
     <motion.div
@@ -57,14 +61,34 @@ export function MobileNav({ onClose }: MobileNavProps) {
           );
         })}
 
-        <div className="mt-2 border-t border-border pt-3">
-          <Link
-            href={ROUTES.login}
-            onClick={onClose}
-            className="flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:brightness-110"
-          >
-            Sign In
-          </Link>
+        <div className="mt-2 flex flex-col gap-2 border-t border-border pt-3">
+          {isClerkLoaded && (
+            <>
+              {user ? (
+                <>
+                  <Link
+                    href={ROUTES.dashboard}
+                    onClick={onClose}
+                    className="flex w-full items-center justify-center rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition-all hover:bg-muted"
+                  >
+                    Dashboard
+                  </Link>
+                  <div className="flex w-full items-center justify-center py-2">
+                    <UserButton appearance={{ elements: { userButtonAvatarBox: "h-9 w-9" } }} />
+                  </div>
+                </>
+              ) : (
+                <SignInButton mode="modal">
+                  <button
+                    onClick={onClose}
+                    className="flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-medium text-white shadow-md transition-all hover:brightness-110"
+                  >
+                    Sign In
+                  </button>
+                </SignInButton>
+              )}
+            </>
+          )}
         </div>
       </motion.nav>
     </motion.div>

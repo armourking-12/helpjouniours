@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Ensure the API key is available
+export const maxDuration = 60; // Allow 60 seconds for AI processing
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(request: Request) {
@@ -14,22 +15,20 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { imageBase64, mimeType } = body;
+    const { fileBase64, mimeType } = body;
 
-    if (!imageBase64 || !mimeType) {
+    if (!fileBase64 || !mimeType) {
       return NextResponse.json(
-        { error: "Image data is required" },
+        { error: "File data and mimeType are required" },
         { status: 400 }
       );
     }
 
-    // Initialize the Gemini 2.5 Flash model
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // The prompt instructs the AI to extract specific academic fields and return strict JSON
     const prompt = `
       You are an expert academic document parser.
-      Analyze this image of an exam paper, assignment, or study notes.
+      Analyze this academic document (could be an exam paper, assignment, or study notes).
       Extract the following information and return it strictly as a JSON object.
       Do not include any markdown formatting (like \`\`\`json), just return the raw JSON object.
 
@@ -50,19 +49,17 @@ export async function POST(request: Request) {
       }
     `;
 
-    // Convert base64 payload to generative AI part
-    const imagePart = {
+    // Support both images and PDFs through inlineData
+    const documentPart = {
       inlineData: {
-        data: imageBase64.replace(/^data:image\/\w+;base64,/, ""), // Strip data URI prefix if present
+        data: fileBase64.replace(/^data:(image|application)\/\w+;base64,/, ""),
         mimeType,
       },
     };
 
-    // Call Gemini
-    const result = await model.generateContent([prompt, imagePart]);
+    const result = await model.generateContent([prompt, documentPart]);
     const responseText = result.response.text();
 
-    // Clean up potential markdown formatting from the response
     const cleanJsonString = responseText
       .replace(/```json/i, "")
       .replace(/```/g, "")
@@ -74,7 +71,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Gemini AI Extraction Error:", error);
     return NextResponse.json(
-      { error: "Failed to extract data from image. Please try again or enter manually." },
+      { error: "Failed to extract data from document. Please try again or enter manually." },
       { status: 500 }
     );
   }

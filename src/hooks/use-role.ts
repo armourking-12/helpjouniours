@@ -21,10 +21,10 @@ export function useRole() {
 
   const currentRole = profile?.role ?? "student";
 
-  const hasMinRole = useCallback(
+    const hasMinRole = useCallback(
     (minimumRole: UserRole): boolean => {
       if (!profile) return false;
-      return ROLE_HIERARCHY[profile.role] >= ROLE_HIERARCHY[minimumRole];
+      return ROLE_HIERARCHY[(profile as any).role as keyof typeof ROLE_HIERARCHY] >= ROLE_HIERARCHY[minimumRole];
     },
     [profile]
   );

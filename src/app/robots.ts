@@ -1,15 +1,14 @@
-import type { MetadataRoute } from "next";
-import { APP_URL } from "@/lib/constants";
+import { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://helpjuniors.com";
+
   return {
-    rules: [
-      {
-        userAgent: "*",
-        allow: "/",
-        disallow: ["/api/", "/dashboard/", "/settings/", "/upload/"],
-      },
-    ],
-    sitemap: `${APP_URL}/sitemap.xml`,
+    rules: {
+      userAgent: "*",
+      allow: "/",
+      disallow: ["/dashboard", "/api/", "/settings"],
+    },
+    sitemap: `${baseUrl}/sitemap.xml`,
   };
 }

@@ -57,7 +57,7 @@ export function ProtectedRoute({
     }
 
     // Insufficient role → redirect to dashboard with error
-    if (profile && ROLE_HIERARCHY[profile.role] < ROLE_HIERARCHY[minimumRole]) {
+    if (profile && ROLE_HIERARCHY[profile.role as keyof typeof ROLE_HIERARCHY] < ROLE_HIERARCHY[minimumRole]) {
       router.push("/dashboard?error=unauthorized");
       return;
     }
@@ -71,7 +71,7 @@ export function ProtectedRoute({
   // Don't render until we confirm auth + role
   if (!user) return null;
   if (requireVerified && !isEmailVerified) return null;
-  if (profile && ROLE_HIERARCHY[profile.role] < ROLE_HIERARCHY[minimumRole]) return null;
+  if (profile && ROLE_HIERARCHY[profile.role as keyof typeof ROLE_HIERARCHY] < ROLE_HIERARCHY[minimumRole]) return null;
 
   return <>{children}</>;
 }
@@ -108,7 +108,7 @@ export function RoleGate({
 
   if (loading) return null;
 
-  if (!profile || ROLE_HIERARCHY[profile.role] < ROLE_HIERARCHY[minimumRole]) {
+  if (!profile || ROLE_HIERARCHY[profile.role as keyof typeof ROLE_HIERARCHY] < ROLE_HIERARCHY[minimumRole]) {
     return <>{fallback}</>;
   }
 

@@ -11,11 +11,12 @@ import { Logo } from "./logo";
 import { MobileNav } from "./mobile-nav";
 import { ThemeToggle } from "./theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
+import { UserButton, SignInButton } from "@clerk/nextjs";
 
 export function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, profile, loading, logout } = useAuth();
+  const { user, profile, isClerkLoaded, logout } = useAuth();
 
   return (
     <>
@@ -70,10 +71,10 @@ export function Navbar() {
             <ThemeToggle />
 
             {/* Auth-dependent buttons */}
-            {!loading && (
+            {isClerkLoaded && (
               <>
                 {user ? (
-                  <div className="hidden items-center gap-2 sm:flex">
+                  <div className="hidden items-center gap-4 sm:flex">
                     <Link
                       href={ROUTES.dashboard}
                       className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
@@ -81,21 +82,14 @@ export function Navbar() {
                       <LayoutDashboard className="h-4 w-4" />
                       Dashboard
                     </Link>
-                    <button
-                      onClick={logout}
-                      className="inline-flex items-center gap-1.5 rounded-lg p-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      aria-label="Sign out"
-                    >
-                      <LogOut className="h-4 w-4" />
-                    </button>
+                    <UserButton appearance={{ elements: { userButtonAvatarBox: "h-9 w-9" } }} />
                   </div>
                 ) : (
-                  <Link
-                    href={ROUTES.login}
-                    className="hidden rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg hover:shadow-indigo-500/30 hover:brightness-110 sm:inline-flex"
-                  >
-                    Sign In
-                  </Link>
+                  <SignInButton mode="modal">
+                    <button className="hidden rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-indigo-500/20 transition-all hover:shadow-lg hover:shadow-indigo-500/30 hover:brightness-110 sm:inline-flex">
+                      Sign In
+                    </button>
+                  </SignInButton>
                 )}
               </>
             )}

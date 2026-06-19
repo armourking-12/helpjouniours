@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useForm } from "react-hook-form";
@@ -14,16 +14,13 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  FileImage,
+  AlertTriangle,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { generateFileHash } from "@/lib/utils/hash";
 import { uploadSchema, type UploadFormData } from "@/lib/validations";
-import { COLLECTIONS, RESOURCE_TYPES, EXAM_TYPES } from "@/lib/constants";
-import { uploadFile } from "@/lib/firebase/storage";
-import { getDocuments, createDocument, where, limit } from "@/lib/firebase/firestore";
-import type { PendingUpload } from "@/types";
+import { RESOURCE_TYPES, EXAM_TYPES } from "@/lib/constants";
 
 type UploadStep = "selection" | "file_preview" | "ai_processing" | "form" | "success";
 type UploadMode = "document" | "capture";
@@ -38,13 +35,13 @@ export function UploadSystem() {
   const [step, setStep] = useState<UploadStep>("selection");
   const [mode, setMode] = useState<UploadMode | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [fileHash, setFileHash] = useState<string | null>(null);
   
   // Progress & Errors
   const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [similarWarning, setSimilarWarning] = useState<string | null>(null);
+  const [ignoreSimilar, setIgnoreSimilar] = useState(false);
 
   // Form
   const {
@@ -58,128 +55,40 @@ export function UploadSystem() {
   });
 
   // ---------------------------------------------------------------------------
-  // File Drop Handlers
-  // ---------------------------------------------------------------------------
-
-  const onDropDocument = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    const selectedFile = acceptedFiles[0];
-    
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setError("File is too large. Maximum size is 25MB.");
-      return;
-    }
-
-    setFile(selectedFile);
-    setMode("document");
-    setStep("file_preview");
-    setError(null);
-    setDuplicateWarning(null);
-
-    // Hash file in background to check duplicates
-    try {
-      const hash = await generateFileHash(selectedFile);
-      setFileHash(hash);
-      await checkForDuplicates(hash);
-    } catch (err) {
-      console.error("Hashing failed:", err);
-    }
-  }, []);
-
-  const onDropCapture = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-    const selectedFile = acceptedFiles[0];
-    
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setError("Image is too large. Maximum size is 25MB.");
-      return;
-    }
-
-    setFile(selectedFile);
-    setMode("capture");
-    setStep("ai_processing");
-    setError(null);
-    setDuplicateWarning(null);
-
-    // Start AI Extraction
-    try {
-      // 1. Hash it first
-      const hash = await generateFileHash(selectedFile);
-      setFileHash(hash);
-      const isDuplicate = await checkForDuplicates(hash);
-      
-      // We can still extract data even if it's a duplicate, just show the warning
-      await extractDataWithGemini(selectedFile);
-    } catch (err) {
-      console.error("Capture process failed:", err);
-      setError("Failed to process image. Please try uploading manually.");
-      setStep("form"); // Fallback to manual entry
-    }
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Dropzones Configuration
-  // ---------------------------------------------------------------------------
-
-  const {
-    getRootProps: getDocRootProps,
-    getInputProps: getDocInputProps,
-    isDragActive: isDocDragActive,
-  } = useDropzone({
-    onDrop: onDropDocument,
-    accept: {
-      "application/pdf": [".pdf"],
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
-      "image/jpeg": [".jpg", ".jpeg"],
-      "image/png": [".png"],
-    },
-    maxFiles: 1,
-  });
-
-  const {
-    getRootProps: getCaptureRootProps,
-    getInputProps: getCaptureInputProps,
-    isDragActive: isCaptureDragActive,
-  } = useDropzone({
-    onDrop: onDropCapture,
-    accept: {
-      "image/*": [".jpg", ".jpeg", ".png", ".webp"],
-    },
-    maxFiles: 1,
-  });
-
-  // ---------------------------------------------------------------------------
   // Core Functions
   // ---------------------------------------------------------------------------
 
-  const checkForDuplicates = async (hash: string): Promise<boolean> => {
-    // Check approved resources
-    const existingApproved = await getDocuments(COLLECTIONS.resources, [
-      where("fileHash", "==", hash),
-      limit(1)
-    ]);
-    
-    if (existingApproved.length > 0) {
-      setDuplicateWarning("This file already exists in our database!");
-      return true;
+  const checkHashCollision = async (hash: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/upload/check-hash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hash }),
+      });
+      const data = await res.json();
+      if (data.isDuplicate) {
+        setDuplicateWarning(data.message);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
-
-    // Check pending uploads
-    const existingPending = await getDocuments(COLLECTIONS.pendingUploads, [
-      where("fileHash", "==", hash),
-      limit(1)
-    ]);
-
-    if (existingPending.length > 0) {
-      setDuplicateWarning("This file has already been uploaded and is pending approval.");
-      return true;
-    }
-
-    return false;
   };
 
-  const extractDataWithGemini = async (imageFile: File) => {
+  const processFileForAI = async (selectedFile: File) => {
+    const isImageOrPdf = selectedFile.type.startsWith("image/") || selectedFile.type === "application/pdf";
+    
+    if (isImageOrPdf) {
+      setStep("ai_processing");
+      await extractDataWithGemini(selectedFile);
+    } else {
+      // Direct to form for DOCX/PPTX
+      setStep("form");
+    }
+  };
+
+  const extractDataWithGemini = async (documentFile: File) => {
     setIsProcessing(true);
     try {
       // Convert file to Base64
@@ -188,7 +97,7 @@ export function UploadSystem() {
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = reject;
       });
-      reader.readAsDataURL(imageFile);
+      reader.readAsDataURL(documentFile);
       const base64Data = await base64Promise;
 
       let result = null;
@@ -201,8 +110,8 @@ export function UploadSystem() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              imageBase64: base64Data,
-              mimeType: imageFile.type,
+              fileBase64: base64Data,
+              mimeType: documentFile.type,
             }),
           });
 
@@ -213,12 +122,11 @@ export function UploadSystem() {
         } catch (err) {
           lastError = err;
           console.warn(`Extraction attempt ${attempt} failed.`);
-          // If we are on the first attempt, wait 1 second before retrying
           if (attempt === 1) await new Promise(res => setTimeout(res, 1000));
         }
       }
 
-      if (!result) throw lastError;
+      if (!result || !result.success) throw lastError;
 
       const data = result.data;
 
@@ -232,7 +140,6 @@ export function UploadSystem() {
       if (data.year) setValue("year", Number(data.year));
       
       if (data.examType) {
-        // Case-insensitive match for robustness
         const matchedType = EXAM_TYPES.find(
           t => t.toLowerCase().replace(/[^a-z]/g, "") === data.examType.toLowerCase().replace(/[^a-z]/g, "")
         );
@@ -240,9 +147,7 @@ export function UploadSystem() {
       }
 
       if (data.tags) setValue("tags", data.tags);
-
-      // Default type for papers
-      setValue("type", "PYQ");
+      setValue("type", "PYQ"); // Default
 
     } catch (err) {
       console.error(err);
@@ -254,78 +159,117 @@ export function UploadSystem() {
   };
 
   const onSubmit = async (data: UploadFormData) => {
-    if (!file || !profile || !fileHash) return;
+    if (!file || !profile) return;
 
     try {
       setError(null);
+      setSimilarWarning(null);
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("ignoreSimilar", ignoreSimilar.toString());
       
-      // Re-verify duplication just in case
-      const isDuplicate = await checkForDuplicates(fileHash);
-      if (isDuplicate) {
-        setError("Cannot upload a duplicate file.");
-        return;
+      formData.append("title", data.title);
+      formData.append("description", data.description);
+      formData.append("type", data.type);
+      formData.append("university", data.university);
+      formData.append("course", data.course);
+      formData.append("semester", data.semester.toString());
+      formData.append("subject", data.subject);
+      formData.append("year", data.year.toString());
+      if (data.examType) formData.append("examType", data.examType);
+      if (data.tags) formData.append("tags", data.tags);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        
+        if (response.status === 409 && errData.error === "SIMILAR_DUPLICATE") {
+          setSimilarWarning(errData.message);
+          return;
+        }
+        
+        throw new Error(errData.message || "Upload failed");
       }
 
-      // 1. Upload file to Firebase Storage
-      const url = await uploadFile(
-        `resources/${profile.uid}/${Date.now()}_${file.name}`,
-        file,
-        undefined,
-        (progress) => {
-          setUploadProgress(progress.progress);
-        }
-      );
-
-      // 2. Save metadata to pendingUploads collection
-      const newUpload: Omit<PendingUpload, "id"> = {
-        title: data.title,
-        description: data.description,
-        type: data.type as any,
-        university: data.university,
-        course: data.course,
-        semester: data.semester,
-        subject: data.subject,
-        year: data.year,
-        examType: (data.examType as any) || null,
-        fileUrl: url,
-        fileName: file.name,
-        fileSize: file.size,
-        fileHash,
-        thumbnailUrl: null, // Could generate one in a cloud function
-        uploadedBy: {
-          uid: profile.uid,
-          displayName: profile.displayName,
-          photoURL: profile.photoURL,
-          reputation: profile.reputation,
-        },
-        status: "pending",
-        tags: data.tags ? data.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      await createDocument(COLLECTIONS.pendingUploads, newUpload);
-      
       setStep("success");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Upload failed:", err);
-      setError("Failed to upload file. Please try again.");
+      setError(err.message || "Failed to upload file. Please try again.");
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // File Drop Handlers
+  // ---------------------------------------------------------------------------
+
+  const handleFileDrop = async (selectedFile: File, selectedMode: UploadMode) => {
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setError("File is too large. Maximum size is 25MB.");
+      return;
+    }
+
+    setFile(selectedFile);
+    setMode(selectedMode);
+    setStep("file_preview");
+    setError(null);
+    setDuplicateWarning(null);
+    setSimilarWarning(null);
+    setIgnoreSimilar(false);
+
+    // Hash file in background to check exact duplicates
+    try {
+      const hash = await generateFileHash(selectedFile);
+      const isDuplicate = await checkHashCollision(hash);
+      
+      // If it's a capture, immediately proceed to AI after checking duplicate
+      if (selectedMode === "capture") {
+        if (!isDuplicate) {
+          await processFileForAI(selectedFile);
+        }
+      }
+    } catch (err) {
+      console.error("Hashing failed:", err);
+    }
+  };
+
+  const { getRootProps: getDocRootProps, getInputProps: getDocInputProps, isDragActive: isDocDragActive } = useDropzone({
+    onDrop: (files) => files[0] && handleFileDrop(files[0], "document"),
+    accept: {
+      "application/pdf": [".pdf"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/png": [".png"],
+    },
+    maxFiles: 1,
+  });
+
+  const { getRootProps: getCaptureRootProps, getInputProps: getCaptureInputProps, isDragActive: isCaptureDragActive } = useDropzone({
+    onDrop: (files) => files[0] && handleFileDrop(files[0], "capture"),
+    accept: {
+      "image/*": [".jpg", ".jpeg", ".png", ".webp"],
+    },
+    maxFiles: 1,
+  });
+
   const cancelUpload = () => {
     setFile(null);
-    setFileHash(null);
     setMode(null);
     setStep("selection");
     setDuplicateWarning(null);
+    setSimilarWarning(null);
+    setIgnoreSimilar(false);
     setError(null);
-    setUploadProgress(0);
     reset();
   };
 
   // ---------------------------------------------------------------------------
-  // Render Helpers
+  // Render
   // ---------------------------------------------------------------------------
 
   return (
@@ -344,12 +288,7 @@ export function UploadSystem() {
             {/* Option 1: Document Upload */}
             <div
               {...getDocRootProps()}
-              className={cn(
-                "group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition-all",
-                isDocDragActive
-                  ? "border-indigo-500 bg-indigo-500/10"
-                  : "border-border hover:border-indigo-500/50 hover:bg-muted/50"
-              )}
+              className={`group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition-all ${isDocDragActive ? "border-indigo-500 bg-indigo-500/10" : "border-border hover:border-indigo-500/50 hover:bg-muted/50"}`}
             >
               <input {...getDocInputProps()} />
               <div className="rounded-full bg-indigo-500/10 p-4 text-indigo-500 transition-transform group-hover:scale-110">
@@ -358,7 +297,7 @@ export function UploadSystem() {
               <div>
                 <h3 className="text-lg font-semibold">Upload Document</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Drag & drop your PDF, DOCX, or PPTX files here.
+                  Drag & drop your PDF, DOCX, PPTX, or image files here.
                 </p>
               </div>
             </div>
@@ -366,12 +305,7 @@ export function UploadSystem() {
             {/* Option 2: Capture Paper */}
             <div
               {...getCaptureRootProps()}
-              className={cn(
-                "group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition-all",
-                isCaptureDragActive
-                  ? "border-emerald-500 bg-emerald-500/10"
-                  : "border-border hover:border-emerald-500/50 hover:bg-muted/50"
-              )}
+              className={`group relative flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-10 text-center transition-all ${isCaptureDragActive ? "border-emerald-500 bg-emerald-500/10" : "border-border hover:border-emerald-500/50 hover:bg-muted/50"}`}
             >
               <input {...getCaptureInputProps()} capture="environment" />
               <div className="absolute right-4 top-4 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-500">
@@ -383,14 +317,14 @@ export function UploadSystem() {
               <div>
                 <h3 className="text-lg font-semibold">Capture Paper</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Take a photo of an exam paper. We&apos;ll extract the details for you.
+                  Take a photo of an exam paper. We&apos;ll extract the details automatically.
                 </p>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* STEP 2: FILE PREVIEW (Option 1 only) */}
+        {/* STEP 2: FILE PREVIEW (Mainly for Document Mode) */}
         {step === "file_preview" && file && (
           <motion.div
             key="file_preview"
@@ -410,30 +344,24 @@ export function UploadSystem() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={cancelUpload}
-                className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
+              <button onClick={cancelUpload} className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {duplicateWarning && (
-              <div className="mt-4 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400 flex items-start gap-2">
+              <div className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                 <p>{duplicateWarning}</p>
               </div>
             )}
 
             <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={cancelUpload}
-                className="rounded-lg px-4 py-2 text-sm font-medium hover:bg-muted"
-              >
+              <button onClick={cancelUpload} className="rounded-lg px-4 py-2 text-sm font-medium hover:bg-muted">
                 Cancel
               </button>
               <button
-                onClick={() => setStep("form")}
+                onClick={() => processFileForAI(file)}
                 disabled={!!duplicateWarning}
                 className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-600 disabled:opacity-50"
               >
@@ -443,7 +371,7 @@ export function UploadSystem() {
           </motion.div>
         )}
 
-        {/* STEP 3: AI PROCESSING (Option 2 only) */}
+        {/* STEP 3: AI PROCESSING */}
         {step === "ai_processing" && (
           <motion.div
             key="ai_processing"
@@ -457,17 +385,10 @@ export function UploadSystem() {
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             </div>
-            <h3 className="text-lg font-medium">Analyzing Paper with AI...</h3>
+            <h3 className="text-lg font-medium">Analyzing Document with AI...</h3>
             <p className="mt-2 text-sm text-muted-foreground max-w-sm">
               Extracting university, course, subject, and other academic details to save you time.
             </p>
-            
-            {duplicateWarning && (
-              <div className="mt-6 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                <p>{duplicateWarning} Extracting anyway for review.</p>
-              </div>
-            )}
           </motion.div>
         )}
 
@@ -483,16 +404,12 @@ export function UploadSystem() {
               <div>
                 <h2 className="text-xl font-semibold">Resource Details</h2>
                 <p className="text-sm text-muted-foreground">
-                  {mode === "capture" 
+                  {mode === "capture" || isProcessing
                     ? "Please review and edit the AI-extracted details below." 
                     : "Fill in the details to help others find your resource."}
                 </p>
               </div>
-              <button
-                onClick={cancelUpload}
-                disabled={isSubmitting}
-                className="rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
+              <button onClick={cancelUpload} disabled={isSubmitting} className="rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -504,10 +421,24 @@ export function UploadSystem() {
               </div>
             )}
 
-            {duplicateWarning && (
-              <div className="mb-6 rounded-lg bg-amber-500/10 p-3 text-sm text-amber-600 dark:text-amber-400 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                <p>{duplicateWarning} You cannot submit this form.</p>
+            {similarWarning && (
+              <div className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-amber-600 dark:text-amber-400">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold">Possible Duplicate Detected</p>
+                    <p className="mt-1">{similarWarning}</p>
+                    <label className="mt-3 flex items-center gap-2 cursor-pointer font-medium">
+                      <input 
+                        type="checkbox" 
+                        checked={ignoreSimilar}
+                        onChange={(e) => setIgnoreSimilar(e.target.checked)}
+                        className="rounded border-amber-500 text-amber-500 focus:ring-amber-500" 
+                      />
+                      I confirm this is a unique resource. Ignore warning.
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -630,22 +561,6 @@ export function UploadSystem() {
                 </div>
               </div>
 
-              {/* Upload Progress Bar */}
-              {isSubmitting && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Uploading file...</span>
-                    <span>{Math.round(uploadProgress)}%</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full bg-indigo-500 transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
               {/* Submit Actions */}
               <div className="flex justify-end gap-3 pt-4 border-t border-border">
                 <button
@@ -658,7 +573,7 @@ export function UploadSystem() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !!duplicateWarning}
+                  disabled={isSubmitting || (!!similarWarning && !ignoreSimilar)}
                   className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-600 disabled:opacity-50"
                 >
                   {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -704,8 +619,4 @@ export function UploadSystem() {
       </AnimatePresence>
     </div>
   );
-}
-
-function cn(...classes: (string | undefined | null | false)[]) {
-  return classes.filter(Boolean).join(" ");
 }
