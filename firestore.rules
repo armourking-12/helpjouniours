@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // -------------------------------------------------------------------------
+    // Helper Functions
+    // -------------------------------------------------------------------------
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isUser(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    // Check if the user has a specific role using custom claims
+    // Custom claims are set by the Admin SDK when updating a user's role
+    function hasRole(role) {
+      return isAuthenticated() && request.auth.token.role == role;
+    }
+    
+    // Role Hierarchy Checks
+    function isModerator() {
+      return hasRole('moderator') || hasRole('admin') || hasRole('super_admin');
+    }
+    
+    function isAdmin() {
+      return hasRole('admin') || hasRole('super_admin');
+    }
+    
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    // 1. Users Collection
+    match /users/{userId} {
+      // Anyone can read basic profiles (needed for leaderboards and resource cards)
+      allow read: if true;
+      // Users can update their own non-restricted fields
+      // Roles, reputation, and stats should only be updated by Admin SDK/Cloud Functions
+      allow create, update: if isUser(userId) 
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'reputation', 'totalUploads', 'totalDownloads']);
+      // Only admins can delete users or update restricted fields
+      allow write: if isAdmin();
+    }
+
+    // 2. Resources Collection
+    match /resources/{resourceId} {
+      // Approved resources are publicly readable
+      allow read: if true;
+      // Only moderators/admins can write directly (users go through pendingUploads)
+      allow write: if isModerator();
+    }
+
+    // 3. Pending Uploads Collection
+    match /pendingUploads/{uploadId} {
+      // Users can read their own pending uploads. Moderators can read all.
+      allow read: if isModerator() || (isAuthenticated() && resource.data.uploadedBy.uid == request.auth.uid);
+      // Users can create uploads (ensure uploadedBy matches auth uid)
+      allow create: if isAuthenticated() && request.resource.data.uploadedBy.uid == request.auth.uid;
+      // Users can update their own pending uploads, moderators can update any
+      allow update: if isModerator() || (isAuthenticated() && resource.data.uploadedBy.uid == request.auth.uid);
+      // Only moderators can delete (e.g. upon rejection or moving to resources)
+      allow delete: if isModerator() || (isAuthenticated() && resource.data.uploadedBy.uid == request.auth.uid);
+    }
+
+    // 4. Notifications Collection
+    match /notifications/{notificationId} {
+      // Users can read and update (mark as read) their own notifications
+      allow read, update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Only admins/system can create or delete
+      allow create, delete: if isAdmin();
+    }
+
+    // 5. Downloads Collection (Tracking)
+    match /downloads/{downloadId} {
+      // Users can create a download record for themselves
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // Only admins can read all downloads (for analytics)
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 6. Leaderboard Collection (Aggregated Cache)
+    match /leaderboard/{docId} {
+      // Publicly readable
+      allow read: if true;
+      // Only writable by Admin SDK / Cloud Functions
+      allow write: if false; 
+    }
+
+    // 7. Audit Logs Collection
+    match /auditLogs/{logId} {
+      // Strictly admin only
+      allow read, write: if isAdmin();
+    }
+  }
+}
