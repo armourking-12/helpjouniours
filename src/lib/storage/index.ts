@@ -10,27 +10,27 @@ export interface StorageUploadResult {
 }
 
 /**
- * Automatically routes the upload to Cloudinary (<5MB) or GitHub (>5MB).
+ * Automatically routes the upload to Cloudinary (images) or GitHub (documents like PDFs).
  */
 export async function uploadResource(
   fileBuffer: Buffer,
   fileName: string,
-  fileSize: number,
+  mimeType: string,
   metadata: GithubStorageMetadata
 ): Promise<StorageUploadResult> {
-  // If file is > 5MB, use GitHub Storage
-  if (fileSize > FIVE_MB) {
-    const url = await uploadToGithub(fileBuffer, fileName, metadata);
-    return { url, provider: "github" };
+  // If file is an image, use Cloudinary
+  if (mimeType.startsWith("image/")) {
+    const result = await uploadToCloudinary(fileBuffer, fileName);
+    return {
+      url: result.url,
+      provider: "cloudinary",
+      publicId: result.publicId,
+    };
   }
 
-  // Otherwise, use Cloudinary
-  const result = await uploadToCloudinary(fileBuffer, fileName);
-  return {
-    url: result.url,
-    provider: "cloudinary",
-    publicId: result.publicId,
-  };
+  // Otherwise (PDF, DOCX, PPTX), use GitHub Storage
+  const url = await uploadToGithub(fileBuffer, fileName, metadata);
+  return { url, provider: "github" };
 }
 
 /**

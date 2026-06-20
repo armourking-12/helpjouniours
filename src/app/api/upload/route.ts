@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     }
 
     // 10. Upload file to storage (Cloudinary or GitHub)
-    const { url, provider } = await uploadResource(buffer, file.name, file.size, {
+    const { url, provider } = await uploadResource(buffer, file.name, file.type, {
       university: uploadData.university,
       course: uploadData.course,
       semester: uploadData.semester,
