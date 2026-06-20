@@ -22,7 +22,7 @@ import { PendingQueue } from "@/components/admin/PendingQueue";
 import { EditResourceModal } from "@/components/dashboard/EditResourceModal";
 import { useState } from "react";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 
 function DashboardContent() {
@@ -30,7 +30,28 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const unauthorizedError = searchParams.get("error") === "unauthorized";
+  const queryClient = useQueryClient();
   const [editingResource, setEditingResource] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const handleDeleteResource = async (resourceId: string) => {
+    if (!window.confirm("Are you sure you want to delete this project/resource? This action cannot be undone.")) return;
+    
+    setIsDeleting(resourceId);
+    try {
+      const res = await fetch(`/api/resources/${resourceId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete resource");
+      
+      // Refresh uploads and stats
+      queryClient.invalidateQueries({ queryKey: ["myUploads"] });
+      queryClient.invalidateQueries({ queryKey: ["userStats"] });
+    } catch (error) {
+      console.error(error);
+      alert("Failed to delete resource");
+    } finally {
+      setIsDeleting(null);
+    }
+  };
 
   const { data: statsData } = useQuery({
     queryKey: ["userStats"],
@@ -259,12 +280,22 @@ function DashboardContent() {
                   }`}>
                     {resource.status.charAt(0).toUpperCase() + resource.status.slice(1)}
                   </span>
-                  <button 
-                    onClick={() => setEditingResource(resource)}
-                    className="text-xs font-medium text-indigo-500 hover:bg-indigo-500/10 px-2 py-1 rounded-md transition-colors"
-                  >
-                    Edit
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setEditingResource(resource)}
+                      className="text-xs font-medium text-indigo-500 hover:bg-indigo-500/10 px-2 py-1 rounded-md transition-colors"
+                      disabled={isDeleting === resource._id}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDeleteResource(resource._id); }}
+                      className="text-xs font-medium text-rose-500 hover:bg-rose-500/10 px-2 py-1 rounded-md transition-colors disabled:opacity-50"
+                      disabled={isDeleting === resource._id}
+                    >
+                      {isDeleting === resource._id ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
                 </div>
                 <h3 className="mt-3 font-semibold leading-snug transition-colors group-hover:text-indigo-500 flex-1 pr-2">
                   {resource.title}
