@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { FOOTER_LINKS, APP_NAME } from "@/lib/constants";
 import { Logo } from "./logo";
-import { Globe, MessageCircle, ExternalLink, Heart } from "lucide-react";
+import { Globe, MessageCircle, ExternalLink, Heart, Mail } from "lucide-react";
 
 const socialLinks = [
-  { icon: Globe, href: "https://github.com", label: "GitHub" },
+  { icon: Mail, href: "mailto:vm9678974@gmail.com", label: "Email Support" },
+  { icon: Globe, href: "https://github.com/armourking-12/helpjouniours", label: "GitHub" },
   { icon: MessageCircle, href: "https://twitter.com", label: "Twitter" },
-  { icon: ExternalLink, href: "https://linkedin.com", label: "LinkedIn" },
 ];
 
 export function Footer() {

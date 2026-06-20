@@ -81,7 +81,7 @@ export default function PrivacyPage() {
               <h2>8. Contact</h2>
               <p>
                 For privacy-related inquiries, contact us at{" "}
-                <a href="mailto:privacy@helpjuniors.app">privacy@helpjuniors.app</a>.
+                <a href="mailto:vm9678974@gmail.com">vm9678974@gmail.com</a>.
               </p>
             </div>
           </AnimatedContainer>

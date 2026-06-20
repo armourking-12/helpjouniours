@@ -92,7 +92,7 @@ export default function TermsPage() {
               <h2>10. Contact</h2>
               <p>
                 For questions about these terms, contact us at{" "}
-                <a href="mailto:legal@helpjuniors.app">legal@helpjuniors.app</a>.
+                <a href="mailto:vm9678974@gmail.com">vm9678974@gmail.com</a>.
               </p>
             </div>
           </AnimatedContainer>
