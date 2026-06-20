@@ -3,7 +3,7 @@ import connectToDatabase from "@/lib/db/mongoose";
 import { Resource } from "@/lib/db/models/Resource";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://helpjuniors.com";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://helpjuniors.store";
 
   // Static routes
   const routes: MetadataRoute.Sitemap = [
