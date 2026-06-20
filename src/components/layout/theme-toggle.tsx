@@ -49,43 +49,20 @@ export function ThemeToggle() {
     });
 
     transition.ready.then(() => {
-      const isGoingDark = nextTheme === "dark";
-
       const clipPath = [
         `circle(0px at ${x}px ${y}px)`,
         `circle(${endRadius}px at ${x}px ${y}px)`,
       ];
 
-      // Base transition easing
-      const easing = "cubic-bezier(0.22, 1, 0.36, 1)";
-      const duration = 600;
-
       // New View (Expanding Circle)
       document.documentElement.animate(
         {
-          clipPath: isGoingDark ? clipPath : [...clipPath].reverse(),
+          clipPath: clipPath,
         },
         {
-          duration,
-          easing,
-          pseudoElement: isGoingDark
-            ? "::view-transition-new(root)"
-            : "::view-transition-old(root)",
-        }
-      );
-
-      // Old View (Fading & Scaling out smoothly)
-      document.documentElement.animate(
-        {
-          opacity: [1, 0],
-          transform: ["scale(1)", "scale(0.96)"],
-        },
-        {
-          duration: duration - 100, // Finish slightly before the circle expands fully
-          easing: "ease-in-out",
-          pseudoElement: isGoingDark
-            ? "::view-transition-old(root)"
-            : "::view-transition-new(root)",
+          duration: 600,
+          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+          pseudoElement: "::view-transition-new(root)",
         }
       );
     });

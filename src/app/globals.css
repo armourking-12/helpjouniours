@@ -134,17 +134,9 @@
   animation: none;
   mix-blend-mode: normal;
 }
-/* Dark -> Light transition (no .dark class on html). Old view (dark) shrinks, so it must be on top. */
 ::view-transition-old(root) {
-  z-index: 2;
+  z-index: 1;
 }
 ::view-transition-new(root) {
-  z-index: 1;
-}
-/* Light -> Dark transition (.dark class present on html). New view (dark) expands, so it must be on top. */
-.dark::view-transition-old(root) {
-  z-index: 1;
-}
-.dark::view-transition-new(root) {
   z-index: 2;
 }
