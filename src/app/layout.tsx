@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     "study materials",
     "university",
     "college",
-    "exam preparations",
+    "exam preparation",
     "AI powered",
   ],
   authors: [{ name: APP_NAME }],
