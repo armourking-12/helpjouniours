@@ -28,10 +28,21 @@ export async function uploadToGithub(
   const { university, course, semester, subject, year, examType } = metadata;
   
   // Clean paths to be URL and filesystem safe
-  const clean = (str: string) => str.replace(/[^a-zA-Z0-9-]/g, "_");
+  const clean = (str: string) => (str ? str.replace(/[^a-zA-Z0-9-]/g, "_") : "");
   
   // Format: University/Course/Semester/Subject/Year/ExamType/filename
-  const path = `${clean(university)}/${clean(course)}/Sem_${semester}/${clean(subject)}/${year}/${clean(examType)}/${clean(fileName)}`;
+  // Filter out empty segments (like examType) to prevent `//` which crashes the GitHub API
+  const pathSegments = [
+    clean(university),
+    clean(course),
+    `Sem_${semester}`,
+    clean(subject),
+    year.toString(),
+    clean(examType),
+    clean(fileName)
+  ].filter(Boolean);
+  
+  const path = pathSegments.join("/");
 
   const contentEncoded = fileBuffer.toString("base64");
 
