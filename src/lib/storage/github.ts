@@ -44,8 +44,8 @@ export async function uploadToGithub(
     branch: "main",
   });
 
-  // Return the raw download URL
-  return `https://raw.githubusercontent.com/${owner}/${repo}/main/${path}`;
+  // Return the CDN optimized download URL
+  return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@main/${path}`;
 }
 
 /**

@@ -7,16 +7,20 @@ import {
   FileText,
   Download,
   Star,
-  Settings,
+  History,
   LogOut,
   AlertCircle,
   Shield,
+  Bookmark,
+  Eye
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { RoleGate } from "@/components/auth/protected-route";
 import { useSearchParams } from "next/navigation";
 import { PendingQueue } from "@/components/admin/PendingQueue";
+import { EditResourceModal } from "@/components/dashboard/EditResourceModal";
+import { useState } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
@@ -26,12 +30,35 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const unauthorizedError = searchParams.get("error") === "unauthorized";
+  const [editingResource, setEditingResource] = useState<any>(null);
 
   const { data: statsData } = useQuery({
     queryKey: ["userStats"],
     queryFn: async () => {
-      const res = await fetch("/api/users/me/stats");
+      const res = await fetch(`/api/users/me/stats?t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
+    enabled: !!profile,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+
+  const { data: savedData, isLoading: isLoadingSaved } = useQuery({
+    queryKey: ["savedResources"],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/me/saved`);
+      if (!res.ok) throw new Error("Failed to fetch saved resources");
+      return res.json();
+    },
+    enabled: !!profile,
+  });
+
+  const { data: uploadsData, isLoading: isLoadingUploads } = useQuery({
+    queryKey: ["myUploads"],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/me/uploads`);
+      if (!res.ok) throw new Error("Failed to fetch my uploads");
       return res.json();
     },
     enabled: !!profile,
@@ -147,11 +174,11 @@ function DashboardContent() {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={() => router.push("/settings")}
+            onClick={() => router.push("/history")}
             className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-muted"
           >
-            <Settings className="h-4 w-4" />
-            Settings
+            <History className="h-4 w-4" />
+            History
           </button>
           <button
             onClick={logout}
@@ -207,6 +234,113 @@ function DashboardContent() {
         </motion.div>
       )}
 
+      {/* My Uploads Section */}
+      {uploadsData?.data && uploadsData.data.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="mt-8 rounded-2xl border border-border/50 bg-card p-6"
+        >
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <Upload className="h-5 w-5 text-indigo-500" />
+              My Uploads
+            </h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {uploadsData.data.map((resource: any) => (
+              <div key={resource._id} className="group cursor-pointer rounded-2xl border border-border/50 bg-card p-4 transition-all hover:border-border hover:shadow-lg flex flex-col h-full relative">
+                <div className="flex items-start justify-between">
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                    resource.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                    resource.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
+                    'bg-amber-500/10 text-amber-500'
+                  }`}>
+                    {resource.status.charAt(0).toUpperCase() + resource.status.slice(1)}
+                  </span>
+                  <button 
+                    onClick={() => setEditingResource(resource)}
+                    className="text-xs font-medium text-indigo-500 hover:bg-indigo-500/10 px-2 py-1 rounded-md transition-colors"
+                  >
+                    Edit
+                  </button>
+                </div>
+                <h3 className="mt-3 font-semibold leading-snug transition-colors group-hover:text-indigo-500 flex-1 pr-2">
+                  {resource.title}
+                </h3>
+                <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+                  {resource.description}
+                </p>
+                <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                    {resource.type}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Eye className="h-3 w-3" />
+                      {resource.views?.toLocaleString() || 0}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Download className="h-3 w-3" />
+                      {resource.downloads?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Saved Resources Section */}
+      {savedData?.data && savedData.data.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="mt-8 rounded-2xl border border-border/50 bg-card p-6"
+        >
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <Bookmark className="h-5 w-5 text-indigo-500" />
+              Saved Papers
+            </h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {savedData.data.map((resource: any) => (
+              <div key={resource._id} className="group cursor-pointer rounded-2xl border border-border/50 bg-card p-4 transition-all hover:border-border hover:shadow-lg flex flex-col h-full">
+                <div className="flex items-start justify-between">
+                  <span className="inline-flex rounded-full bg-indigo-500/10 px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                    {resource.type}
+                  </span>
+                </div>
+                <h3 className="mt-3 font-semibold leading-snug transition-colors group-hover:text-indigo-500 flex-1 pr-2">
+                  {resource.title}
+                </h3>
+                <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+                  {resource.description}
+                </p>
+                <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                  <span className="text-xs font-medium text-indigo-500 group-hover:underline" onClick={() => window.open(resource.fileUrl, "_blank")}>
+                    Download
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Eye className="h-3 w-3" />
+                      {resource.views?.toLocaleString() || 0}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Download className="h-3 w-3" />
+                      {resource.downloads?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
 
       {/* Role-based sections */}
@@ -247,6 +381,14 @@ function DashboardContent() {
           </p>
         </motion.div>
       </RoleGate>
+
+      {/* Edit Modal */}
+      {editingResource && (
+        <EditResourceModal
+          resource={editingResource}
+          onClose={() => setEditingResource(null)}
+        />
+      )}
     </div>
   );
 }

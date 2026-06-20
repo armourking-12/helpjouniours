@@ -118,6 +118,27 @@ export default function FAQPage() {
         </div>
       </section>
 
+      {/* FAQ Schema */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": faqs.flatMap(section => 
+              section.questions.map(q => ({
+                "@type": "Question",
+                "name": q.q,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": q.a
+                }
+              }))
+            )
+          })
+        }}
+      />
+
       <section className="pb-20 pt-4">
         <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
           <AnimatedContainer variant="stagger">

@@ -66,43 +66,61 @@ const features = [
   },
 ];
 
-const stats = [
-  { value: "10,000+", label: "Resources", icon: FileText },
-  { value: "500+", label: "Universities", icon: GraduationCap },
-  { value: "50,000+", label: "Students", icon: Users },
-  { value: "100,000+", label: "Downloads", icon: Download },
-];
 
-const testimonials = [
-  {
-    name: "Priya Sharma",
-    role: "B.Tech CSE, 3rd Year",
-    university: "Delhi University",
-    content:
-      "HelpJuniors saved me during exam season! I found PYQs for every subject within minutes. The AI upload feature is absolutely brilliant.",
-    rating: 5,
-  },
-  {
-    name: "Rahul Patel",
-    role: "BCA, 2nd Year",
-    university: "Mumbai University",
-    content:
-      "I upload all my notes here after every semester. The reputation system motivates me to contribute more. Love the dark mode too!",
-    rating: 5,
-  },
-  {
-    name: "Ananya Singh",
-    role: "M.Sc Physics, 1st Year",
-    university: "JNU Delhi",
-    content:
-      "The search filters are incredibly precise. I can find exactly what I need by filtering semester, subject, and exam type. Game changer!",
-    rating: 5,
-  },
-];
+
+import { useState, useEffect } from "react";
 
 export default function HomePage() {
+  const [dbStats, setDbStats] = useState({
+    resources: 0,
+    universities: 0,
+    users: 0,
+    downloads: 0
+  });
+
+  useEffect(() => {
+    fetch('/api/public/stats')
+      .then(res => res.json())
+      .then(res => {
+        if (res.success) {
+          setDbStats({
+            resources: res.data.resources,
+            universities: res.data.universities,
+            users: res.data.users,
+            downloads: res.data.downloads
+          });
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  const dynamicStats = [
+    { value: dbStats.resources.toLocaleString(), label: "Resources", icon: FileText },
+    { value: dbStats.universities.toLocaleString(), label: "Universities", icon: GraduationCap },
+    { value: dbStats.users.toLocaleString(), label: "Students", icon: Users },
+    { value: dbStats.downloads.toLocaleString(), label: "Downloads", icon: Download },
+  ];
+
   return (
+
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            name: "HelpJuniors",
+            url: "https://helpjuniors.com",
+            logo: "https://helpjuniors.com/favicon.ico",
+            description: "AI-Powered Student Resources platform for finding previous year question papers, notes, and study materials.",
+            sameAs: [
+              "https://twitter.com/helpjuniors",
+              "https://github.com/helpjuniors"
+            ]
+          })
+        }}
+      />
       {/* Hero Section */}
       <section className="relative overflow-hidden">
         {/* Background Effects */}
@@ -162,7 +180,7 @@ export default function HomePage() {
           {/* Stats */}
           <AnimatedContainer variant="stagger" className="mt-20" delay={0.4}>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-8">
-              {stats.map((stat) => (
+              {dynamicStats.map((stat) => (
                 <AnimatedItem key={stat.label}>
                   <div className="group flex flex-col items-center rounded-2xl border border-border/50 bg-card/50 p-6 text-center backdrop-blur-sm transition-all hover:border-indigo-500/30 hover:bg-card hover:shadow-lg">
                     <stat.icon className="mb-3 h-6 w-6 text-indigo-500" />
@@ -281,50 +299,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="border-t border-border/40 bg-muted/30 py-20 md:py-28">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <AnimatedContainer variant="fadeUp" className="mx-auto max-w-3xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-              Loved by{" "}
-              <span className="bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent">
-                Students
-              </span>
-            </h2>
-            <p className="mt-4 text-lg text-muted-foreground">
-              See what students from top universities are saying about HelpJuniors
-            </p>
-          </AnimatedContainer>
-
-          <AnimatedContainer variant="stagger" className="mt-16">
-            <div className="grid gap-6 md:grid-cols-3">
-              {testimonials.map((testimonial) => (
-                <AnimatedItem key={testimonial.name}>
-                  <div className="flex flex-col rounded-2xl border border-border/50 bg-card p-6 transition-all hover:shadow-lg">
-                    <div className="mb-4 flex gap-1">
-                      {Array.from({ length: testimonial.rating }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className="h-4 w-4 fill-amber-400 text-amber-400"
-                        />
-                      ))}
-                    </div>
-                    <p className="flex-1 text-sm leading-relaxed text-muted-foreground">
-                      &ldquo;{testimonial.content}&rdquo;
-                    </p>
-                    <div className="mt-6 border-t border-border/40 pt-4">
-                      <p className="font-semibold">{testimonial.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {testimonial.role} • {testimonial.university}
-                      </p>
-                    </div>
-                  </div>
-                </AnimatedItem>
-              ))}
-            </div>
-          </AnimatedContainer>
-        </div>
-      </section>
 
       {/* CTA Section */}
       <section className="py-20 md:py-28">

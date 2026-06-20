@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import connectToDatabase from "@/lib/db/mongoose";
 import { Resource } from "@/lib/db/models/Resource";
+import { User } from "@/lib/db/models/User";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
@@ -41,8 +45,14 @@ export async function GET(request: Request) {
     if (sort === "oldest") sortOptions = { createdAt: 1 };
 
     // Execute
+    const { userId } = await auth();
+    let currentUser: any = null;
+    if (userId) {
+      currentUser = await User.findOne({ clerkId: userId }).lean();
+    }
+
     const skip = (page - 1) * limit;
-    const [resources, total] = await Promise.all([
+    const [rawResources, total] = await Promise.all([
       Resource.find(query)
         .sort(sortOptions)
         .skip(skip)
@@ -50,6 +60,28 @@ export async function GET(request: Request) {
         .lean(),
       Resource.countDocuments(query),
     ]);
+
+    // Attach computed properties for the UI
+    const resources = rawResources.map((res: any) => {
+      const likesCount = Array.isArray(res.likes) ? res.likes.length : 0;
+      let hasLiked = false;
+      let hasSaved = false;
+
+      if (currentUser) {
+        hasLiked = Array.isArray(res.likes) && res.likes.some((uid: any) => uid.toString() === currentUser._id.toString());
+        hasSaved = Array.isArray(currentUser.savedResources) && currentUser.savedResources.some((rid: any) => rid.toString() === res._id.toString());
+      }
+
+      // Strip internal arrays (likes ObjectIds, viewedBy identifiers) from the response
+      const { likes, viewedBy, ...safeResource } = res;
+
+      return {
+        ...safeResource,
+        likesCount,
+        hasLiked,
+        hasSaved
+      };
+    });
 
     return NextResponse.json({
       success: true,

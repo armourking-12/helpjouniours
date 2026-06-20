@@ -3,7 +3,9 @@ import connectToDatabase from "@/lib/db/mongoose";
 import { User } from "@/lib/db/models/User";
 import { Resource } from "@/lib/db/models/Resource";
 import { Notification } from "@/lib/db/models/Notification";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
@@ -16,10 +18,36 @@ export async function GET(request: Request) {
     await connectToDatabase();
 
     // 1. Fetch user data (for reputation)
-    const user = await User.findOne({ clerkId }).select("_id reputation").lean();
+    let user = await User.findOne({ clerkId }).select("_id reputation").lean();
+    
     if (!user) {
-      return NextResponse.json({ error: "User profile not found" }, { status: 404 });
+      // Auto-sync mechanism: If user doesn't exist, create them
+      const clerkUser = await currentUser();
+      if (!clerkUser) {
+        return NextResponse.json({ error: "User profile not found and could not sync" }, { status: 404 });
+      }
+      
+      const email = clerkUser.emailAddresses[0]?.emailAddress || "";
+      const name = `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || "Student";
+      
+      let existingUser = await User.findOne({ email }).lean();
+      if (existingUser) {
+        await User.updateOne({ email }, { $set: { clerkId: clerkUser.id } });
+        user = { _id: existingUser._id, reputation: existingUser.reputation || 0 };
+      } else {
+        const newUser = await User.create({
+          clerkId: clerkUser.id,
+          email,
+          name,
+          image: clerkUser.imageUrl,
+          emailVerified: clerkUser.emailAddresses[0]?.verification?.status === "verified",
+          role: "student",
+          reputation: 0,
+        });
+        user = { _id: newUser._id, reputation: 0 };
+      }
     }
+    
     const userId = user._id;
 
     // 2. Aggregate stats (total uploads, total downloads)

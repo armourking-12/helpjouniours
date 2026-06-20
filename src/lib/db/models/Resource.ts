@@ -24,8 +24,10 @@ export interface IResource extends Document {
   };
   status: "pending" | "approved" | "rejected";
   tags: string[];
+  likes: mongoose.Types.ObjectId[];
   downloads: number;
   views: number;
+  viewedBy: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,14 +61,17 @@ const ResourceSchema = new Schema<IResource>(
       default: "pending",
     },
     tags: [{ type: String }],
+    likes: [{ type: Schema.Types.ObjectId, ref: "User" }],
     downloads: { type: Number, default: 0 },
     views: { type: Number, default: 0 },
+    viewedBy: [{ type: String }],
   },
   { timestamps: true }
 );
 
 // Indexes for query optimization ("low effort to work" but extremely fast)
 ResourceSchema.index({ status: 1, createdAt: -1 }); // Used for default feed sorting
+ResourceSchema.index({ type: 1, status: 1 }); // Used for fast filtering by type
 ResourceSchema.index({ university: 1, course: 1, subject: 1 }); // Used for fast filtering
 ResourceSchema.index({ "uploadedBy.userId": 1 }); // Used for user profile lookups
 ResourceSchema.index({ downloads: -1, views: -1 }); // Used for popular sorting

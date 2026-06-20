@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "motion/react";
 import {
   UploadCloud,
@@ -30,6 +31,7 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 export function UploadSystem() {
   const router = useRouter();
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
 
   // State
   const [step, setStep] = useState<UploadStep>("selection");
@@ -196,6 +198,7 @@ export function UploadSystem() {
         throw new Error(errData.message || "Upload failed");
       }
 
+      queryClient.invalidateQueries({ queryKey: ["userStats"] });
       setStep("success");
     } catch (err: any) {
       console.error("Upload failed:", err);
@@ -597,7 +600,7 @@ export function UploadSystem() {
             </div>
             <h2 className="text-2xl font-bold">Upload Successful!</h2>
             <p className="mt-2 max-w-md text-muted-foreground">
-              Thank you for contributing! Your resource has been sent to our moderators for review. It will appear publicly once approved.
+              Thank you for contributing! Your resource has been instantly approved and is now publicly visible on the Resources page.
             </p>
             <div className="mt-8 flex gap-4">
               <button

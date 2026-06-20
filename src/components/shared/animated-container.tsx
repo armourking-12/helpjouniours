@@ -1,4 +1,5 @@
 "use client";
+import { useMemo } from "react";
 
 import { motion, type Variants } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,7 @@ export function AnimatedContainer({
   as = "div",
   viewport = true,
 }: AnimatedContainerProps) {
-  const Component = motion.create(as);
+  const Component = useMemo(() => motion.create(as), [as]);
   const variants = containerVariants[variant];
 
   return (

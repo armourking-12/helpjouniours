@@ -11,6 +11,7 @@ export interface IUser extends Document {
   // Custom fields
   role: "student" | "moderator" | "admin" | "super_admin";
   reputation: number;
+  savedResources: mongoose.Types.ObjectId[];
 }
 
 const UserSchema = new Schema<IUser>(
@@ -26,6 +27,7 @@ const UserSchema = new Schema<IUser>(
       default: "student",
     },
     reputation: { type: Number, default: 0 },
+    savedResources: [{ type: Schema.Types.ObjectId, ref: "Resource" }],
   },
   { timestamps: true }
 );

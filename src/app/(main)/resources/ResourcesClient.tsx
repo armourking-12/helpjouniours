@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Filter, FileText, Download, BookOpen, SlidersHorizontal, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Search, Filter, FileText, Download, BookOpen, SlidersHorizontal, Loader2, ChevronLeft, ChevronRight, Heart, Bookmark, Eye } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { AnimatedContainer, AnimatedItem } from "@/components/shared/animated-container";
 import { RESOURCE_TYPES } from "@/lib/constants";
@@ -21,40 +22,148 @@ export function ResourcesClient() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [activeType, setActiveType] = useState<string>("");
   const [page, setPage] = useState(1);
+  const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-      setPage(1); // Reset page on new search
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  const handleSearch = () => {
+    setDebouncedQuery(searchQuery);
+    setPage(1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
 
   const { data, isLoading } = useQuery({
-    queryKey: ["resources", debouncedQuery, activeType, page],
+    queryKey: ["resources", debouncedQuery, activeType, page, searchParams.get("university"), searchParams.get("course")],
     queryFn: async () => {
       const params = new URLSearchParams({
         q: debouncedQuery,
         type: activeType,
         page: page.toString(),
       });
-      const res = await fetch(`/api/resources?${params}`);
+      
+      const university = searchParams.get("university");
+      const course = searchParams.get("course");
+      
+      if (university) params.append("university", university);
+      if (course) params.append("course", course);
+      const res = await fetch(`/api/resources?${params}&t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    staleTime: 60000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const downloadMutation = useMutation({
-    mutationFn: async ({ id, url }: { id: string; url: string }) => {
-      // Open in new tab immediately for better UX
-      window.open(url, "_blank");
-      
+    mutationFn: async ({ id, url, title }: { id: string; url: string; title: string }) => {
       // Increment in background
-      await fetch(`/api/resources/${id}/download`, { method: "POST" });
+      fetch(`/api/resources/${id}/download`, { method: "POST" }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["userStats"] });
+      }).catch(console.error);
+
+      // Force Download Logic
+      let downloadUrl = url;
+      
+      // If Cloudinary, add fl_attachment parameter to force download headers from server
+      if (url.includes("res.cloudinary.com")) {
+        const parts = url.split("/upload/");
+        if (parts.length === 2) {
+          // Add fl_attachment flag
+          downloadUrl = `${parts[0]}/upload/fl_attachment/${parts[1]}`;
+        }
+      }
+      
+      // Programmatic click to trigger download
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      // Provide a clean filename without spaces
+      a.download = title ? title.replace(/\s+/g, '_') : "helpjuniors_resource";
+      a.target = "_blank"; 
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     },
   });
+
+  const likeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/resources/${id}/like`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to like");
+      return res.json();
+    },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["resources"] });
+      const previousData = queryClient.getQueryData(["resources", debouncedQuery, activeType, page, searchParams.get("university"), searchParams.get("course")]);
+      
+      queryClient.setQueryData(
+        ["resources", debouncedQuery, activeType, page, searchParams.get("university"), searchParams.get("course")],
+        (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.map((res: any) => 
+              res._id === id ? { 
+                ...res, 
+                hasLiked: !res.hasLiked,
+                likesCount: res.hasLiked ? Math.max(0, res.likesCount - 1) : res.likesCount + 1 
+              } : res
+            )
+          };
+        }
+      );
+      return { previousData };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(["resources", debouncedQuery, activeType, page, searchParams.get("university"), searchParams.get("course")], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["resources"] });
+    }
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/resources/${id}/save`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ["resources"] });
+      const previousData = queryClient.getQueryData(["resources", debouncedQuery, activeType, page, searchParams.get("university"), searchParams.get("course")]);
+      
+      queryClient.setQueryData(
+        ["resources", debouncedQuery, activeType, page, searchParams.get("university"), searchParams.get("course")],
+        (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.map((res: any) => 
+              res._id === id ? { ...res, hasSaved: !res.hasSaved } : res
+            )
+          };
+        }
+      );
+      return { previousData };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(["resources", debouncedQuery, activeType, page, searchParams.get("university"), searchParams.get("course")], context.previousData);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: ["savedResources"] });
+    }
+  });
+
+
 
   const handleTypeToggle = (type: string) => {
     setActiveType(prev => prev === type ? "" : type);
@@ -78,15 +187,22 @@ export function ResourcesClient() {
           >
             {/* Search Bar */}
             <div className="mx-auto max-w-2xl">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+              <div className="relative flex items-center">
+                <Search className="absolute left-4 h-5 w-5 text-muted-foreground" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   placeholder="Search by subject, university, or keyword..."
-                  className="w-full rounded-xl border border-border bg-card py-3.5 pl-12 pr-4 text-base shadow-sm transition-all placeholder:text-muted-foreground focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-xl border border-border bg-card py-3.5 pl-12 pr-24 text-base shadow-sm transition-all placeholder:text-muted-foreground focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
+                <button
+                  onClick={handleSearch}
+                  className="absolute right-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-600"
+                >
+                  Search
+                </button>
               </div>
             </div>
           </PageHeader>
@@ -135,21 +251,44 @@ export function ResourcesClient() {
                   {resources.map((resource: any) => (
                     <AnimatedItem key={resource._id}>
                       <div 
-                        onClick={() => downloadMutation.mutate({ id: resource._id, url: resource.fileUrl })}
+                        onClick={() => router.push(`/resources/${resource._id}`)}
                         className="group cursor-pointer rounded-2xl border border-border/50 bg-card p-5 transition-all hover:border-border hover:shadow-lg flex flex-col h-full"
                       >
                         <div className="flex items-start justify-between">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${typeColors[resource.type] || "bg-muted text-muted-foreground"}`}>
                             {resource.type}
                           </span>
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Download className="h-3 w-3" />
-                            {resource.downloads?.toLocaleString() || 0}
-                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Eye className="h-3 w-3" />
+                              {resource.views?.toLocaleString() || 0}
+                            </span>
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Download className="h-3 w-3" />
+                              {resource.downloads?.toLocaleString() || 0}
+                            </span>
+                          </div>
                         </div>
-                        <h3 className="mt-3 font-semibold leading-snug transition-colors group-hover:text-indigo-500 flex-1">
-                          {resource.title}
-                        </h3>
+                        <div className="flex items-start justify-between mt-3">
+                          <h3 className="font-semibold leading-snug transition-colors group-hover:text-indigo-500 flex-1 pr-2">
+                            {resource.title}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); likeMutation.mutate(resource._id); }}
+                              className={`flex items-center gap-1.5 px-2 py-1 rounded-full transition-colors ${resource.hasLiked ? "bg-rose-500/10 text-rose-500" : "hover:bg-muted text-muted-foreground"}`}
+                            >
+                              <Heart className={`h-4 w-4 ${resource.hasLiked ? "fill-current" : ""}`} />
+                              <span className="text-xs font-medium">{resource.likesCount || 0}</span>
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); saveMutation.mutate(resource._id); }}
+                              className={`p-1.5 rounded-full transition-colors ${resource.hasSaved ? "bg-indigo-500/10 text-indigo-500" : "hover:bg-muted text-muted-foreground"}`}
+                            >
+                              <Bookmark className={`h-4 w-4 ${resource.hasSaved ? "fill-current" : ""}`} />
+                            </button>
+                          </div>
+                        </div>
                         <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
                           {resource.description}
                         </p>

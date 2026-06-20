@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "motion/react";
+import { UploadCloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_LINKS, ROUTES } from "@/lib/constants";
 import { Logo } from "./logo";
@@ -64,6 +65,15 @@ export function MobileNav({ onClose }: MobileNavProps) {
         <div className="mt-2 flex flex-col gap-2 border-t border-border pt-3">
           {isClerkLoaded && (
             <>
+              <Link
+                href={ROUTES.upload}
+                onClick={onClose}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-600 transition-all hover:bg-emerald-500/20 dark:text-emerald-400"
+              >
+                <UploadCloud className="h-4 w-4" />
+                Upload Resource
+              </Link>
+
               {user ? (
                 <>
                   <Link
