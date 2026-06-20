@@ -1,7 +1,7 @@
 import { uploadToCloudinary, deleteFromCloudinary } from "./cloudinary";
 import { uploadToGithub, deleteFromGithub, type GithubStorageMetadata } from "./github";
 
-const TEN_MB = 10 * 1024 * 1024;
+const FIVE_MB = 5 * 1024 * 1024;
 
 export interface StorageUploadResult {
   url: string;
@@ -10,7 +10,7 @@ export interface StorageUploadResult {
 }
 
 /**
- * Automatically routes the upload to Cloudinary (<10MB) or GitHub (>10MB).
+ * Automatically routes the upload to Cloudinary (<5MB) or GitHub (>5MB).
  */
 export async function uploadResource(
   fileBuffer: Buffer,
@@ -18,8 +18,8 @@ export async function uploadResource(
   fileSize: number,
   metadata: GithubStorageMetadata
 ): Promise<StorageUploadResult> {
-  // If file is > 10MB, use GitHub Storage
-  if (fileSize > TEN_MB) {
+  // If file is > 5MB, use GitHub Storage
+  if (fileSize > FIVE_MB) {
     const url = await uploadToGithub(fileBuffer, fileName, metadata);
     return { url, provider: "github" };
   }
