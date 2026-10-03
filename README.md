@@ -267,7 +267,7 @@ Contributions are warmly welcomed! If you'd like to improve HelpJuniors:
 
 ## 📄 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Developed by DuddleTech. See `LICENSE` for more information.
 
 ---
 
