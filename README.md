@@ -267,7 +267,9 @@ Contributions are warmly welcomed! If you'd like to improve HelpJuniors:
 
 ## 📄 License
 
-Developed by DuddleTech. See `LICENSE` for more information.
+HelpJuniours is a proprietary product developed by DuddleTech.
+
+All rights reserved. The source code, design, and related assets may not be copied, modified, distributed, or reused without explicit written permission.
 
 ---
 
